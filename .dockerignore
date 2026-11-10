@@ -1,0 +1,15 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!server.js
+!limits.js
+!auth.js
+!exporter.js
+!direct-export.js
+!artwork.js
+!embedded-artwork.js
+!root.playwright.js
+!zip-stream.js
+!public/
+!public/**
