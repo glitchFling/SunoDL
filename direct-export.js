@@ -136,7 +136,8 @@ export async function exportDirectPlaylist({playlist, folder, update, signal}) {
       update({stage: 'preparing', message: `Downloading original audio · ${index + 1} of ${tracks.length}`, percent: Math.floor(index / tracks.length * 55)});
       const sourceBytes = await fetchTrack(track, signal);
       const number = index + 1;
-      const numberedTitle = `${number}. ${track.title}`;
+      const prefix = `${String(number).padStart(2, '0')} - `;
+      const numberedTitle = `${prefix}${track.title}`;
       update({stage: 'cleaning', message: `Numbering and tagging · Track ${number} of ${tracks.length}`, percent: 55 + Math.floor((index / tracks.length) * 40)});
       const tagged = await embedArtwork(sourceBytes, '.m4a', image, {
         folder, index, signal, title: numberedTitle, album: title, track: `${number}/${tracks.length}`
@@ -145,7 +146,7 @@ export async function exportDirectPlaylist({playlist, folder, update, signal}) {
       if (budget < 0) throw Error('Playlist contents exceed the 5 GB expanded-data limit.');
       if (tagged.bytes.length > MAX_FILE_BYTES) throw Error('A single audio track exceeds the 256 MiB per-track limit.');
       if (tagged.embedded) embeddedArtworkCount++;
-      await output.append(tagged.bytes, `${number}. ${cleanFileStem(track.title)}.m4a`);
+      await output.append(tagged.bytes, `${prefix}${cleanFileStem(track.title)}.m4a`);
     }
 
     for (const image of images.files) {

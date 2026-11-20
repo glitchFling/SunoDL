@@ -176,7 +176,7 @@ async function exportPlaylistViaBrowser({ playlist, format, lyrics, folder, upda
         const isAudio = /\.(mp3|wav|flac|m4a|mp4|aac|ogg|opus|webm)$/i.test(ext);
         const trackInfo = isAudio ? trackByStem.get(clean.slice(0, -ext.length).toLowerCase()) : null;
         const trackNumber = trackInfo ? trackInfo.index + 1 : tracks + 1;
-        const trackTitle = `${trackNumber}. ${trackInfo?.track.title || stem}`;
+        const trackTitle = `${String(trackNumber).padStart(2, '0')} - ${trackInfo?.track.title || stem}`;
         const outputStem = isAudio ? cleanName(trackTitle).slice(0, 160) : stem;
         let candidate = outputStem + ext, duplicate = 2;
         while (used.has(candidate.toLowerCase())) candidate = `${outputStem} (${duplicate++})${ext}`;
