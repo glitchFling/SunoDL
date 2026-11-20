@@ -24,13 +24,42 @@ export function songUrls(value) {
     const suno = ['suno.com', 'www.suno.com'].includes(url.hostname) && new RegExp(`^/song/${uuid}/?$`, 'i').test(url.pathname);
     const apple = url.hostname === 'music.apple.com' && (
       /^\/[a-z]{2}\/song\/[^/]+\/\d+\/?$/i.test(url.pathname) ||
-      (/^\/[a-z]{2}\/album\/[^/]+\/\d+\/?$/i.test(url.pathname) && /^\d+$/.test(url.searchParams.get('i') || '')));
+      (/^\/[a-z]{2}\/album\/[^/]+\/\d+\/?$/i.test(url.pathname) && (!url.searchParams.has('i') || /^\d+$/.test(url.searchParams.get('i') || ''))));
     if (url.protocol !== 'https:' || url.port || url.username || url.password || (!suno && !apple)) {
-      throw Error(`Line ${index + 1}: use an HTTPS Suno /song/ link or an Apple Music song link.`);
+      throw Error(`Line ${index + 1}: use an HTTPS Suno /song/ link or an Apple Music song or album link.`);
     }
     url.hash = '';
     return {url: url.href, provider: suno ? 'suno' : 'apple', id: suno ? url.pathname.split('/')[2] : null};
   });
+}
+
+export async function expandSongUrls(songs, signal) {
+  const expanded = [];
+  for (const song of songs) {
+    signal?.throwIfAborted();
+    const url = new URL(song.url);
+    if (song.provider !== 'apple' || !url.pathname.includes('/album/') || url.searchParams.has('i')) {
+      expanded.push(song);
+    } else {
+      const parts = url.pathname.split('/').filter(Boolean);
+      const albumId = parts.at(-1);
+      const response = await fetch(`https://itunes.apple.com/lookup?id=${albumId}&entity=song&country=${parts[0]}&limit=2000`, {
+        redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])])
+      });
+      if (!response.ok || !response.body) throw Error(`Apple Music album lookup returned HTTP ${response.status}.`);
+      const data = JSON.parse((await readAudio(response.body, signal, 4 * 1024 * 1024)).toString('utf8'));
+      const tracks = (data.results || []).filter(track => track.kind === 'song' && String(track.collectionId) === albumId)
+        .sort((a, b) => (a.discNumber || 1) - (b.discNumber || 1) || a.trackNumber - b.trackNumber);
+      if (!tracks.length) throw Error('Apple Music returned no available songs for this album in its selected country.');
+      for (const track of tracks) {
+        const trackUrl = new URL(url);
+        trackUrl.search = `?i=${track.trackId}`;
+        expanded.push(songUrls(trackUrl.href)[0]);
+      }
+    }
+    if (expanded.length > MAX_ENTRIES) throw Error(`Albums expand to more than the ${MAX_ENTRIES} track limit.`);
+  }
+  return expanded;
 }
 
 async function readAudio(stream, signal, maximum = MAX_FILE_BYTES) {
@@ -69,7 +98,8 @@ async function appleSong(track, context, signal, format, update) {
     page.setDefaultTimeout(90_000);
     let dialogMessage = '';
     page.on('dialog', dialog => { dialogMessage = dialog.message(); dialog.dismiss().catch(() => {}); });
-    await page.goto('https://aaplmusicdownloader.com/', {waitUntil: 'domcontentloaded'});
+    const response = await page.goto('https://aaplmusicdownloader.com/', {waitUntil: 'domcontentloaded'});
+    if (!response?.ok()) throw Error(`AAPLmusicDownloader returned HTTP ${response?.status() || 'error'}. Please try again later.`);
     await page.locator('#id_url').fill(track.url);
     // Filling the field triggers the site's own input handler.
     await waitForSource(page, '#download_btn', signal);
@@ -124,9 +154,12 @@ export async function exportSongs({songs, format, folder, update, signal,
   signal.addEventListener('abort', stop, {once: true});
   try {
     signal.throwIfAborted();
+    update({stage: 'loading', message: 'Loading song links and expanding albums', percent: null});
+    songs = await expandSongUrls(songs, signal);
     if (songs.some(song => song.provider === 'apple')) {
       browser = await launch();
-      context = await browser.newContext({acceptDownloads: true});
+      context = await browser.newContext({acceptDownloads: true,
+        userAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36`});
     }
     signal.throwIfAborted();
     output = createZipWriter(file);

@@ -9,7 +9,7 @@ import ffmpeg from 'ffmpeg-static';
 import JSZip from 'jszip';
 import {chromium} from 'playwright';
 import {parseBuffer} from 'music-metadata';
-import {songUrls, exportSongs} from './song-export.js';
+import {songUrls, expandSongUrls, exportSongs} from './song-export.js';
 
 const suno = 'https://suno.com/song/2259b722-dc70-43d2-9921-21ef9a0030d2';
 const apple = 'https://music.apple.com/us/song/test/123456789';
@@ -18,8 +18,27 @@ test('multiline input validates every provider URL and preserves input order', (
   assert.deepEqual(songUrls(` ${suno}\r\n\n${apple}\n${suno}`).map(song => song.provider), ['suno', 'apple', 'suno']);
   assert.equal(songUrls('https://music.apple.com/us/album/test/123?i=456')[0].provider, 'apple');
   for (const value of ['', 'https://evil.test/song/test', apple.replace('https:', 'http:'),
-    apple.replace('music.apple.com', 'music.apple.com.evil.test'), 'https://music.apple.com/us/album/test/123',
+    apple.replace('music.apple.com', 'music.apple.com.evil.test'), 'https://music.apple.com/us/album/test/123?i=oops',
     suno.replace('suno.com', 'user@suno.com'), `${suno}\ninvalid`]) assert.throws(() => songUrls(value));
+});
+
+test('Apple album URLs expand in disc and track order among other input songs', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async url => {
+      assert.match(String(url), /country=gb/);
+      return Response.json({results: [
+        {kind: 'song', collectionId: 1893446983, trackId: 33, discNumber: 2, trackNumber: 1},
+        {kind: 'song', collectionId: 1893446983, trackId: 22, discNumber: 1, trackNumber: 2},
+        {kind: 'song', collectionId: 1893446983, trackId: 11, discNumber: 1, trackNumber: 1}
+      ]});
+    };
+    const songs = await expandSongUrls(songUrls(`${suno}\nhttps://music.apple.com/gb/album/mtg-prism-ep/1893446983\n${apple}`));
+    assert.equal(songs.length, 5);
+    assert.deepEqual(songs.slice(1, 4).map(song => new URL(song.url).searchParams.get('i')), ['11', '22', '33']);
+    assert.equal(songs[0].url, suno);
+    assert.equal(songs.at(-1).url, apple);
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('mixed song batch downloads through the Apple UI and preserves numbering and audio tags', async () => {
