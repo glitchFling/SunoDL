@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {passwordGate} from './auth.js';
 import {exportPlaylist, playlistUrl} from './exporter.js';
+import {exportSongs, songUrls} from './song-export.js';
 import {runArtworkCheck} from './root.playwright.js';
 
 const app = express();
@@ -31,9 +32,12 @@ const publicJob = job => ({
 
 app.post('/api/jobs', async (req, res) => {
   if (active || activeDownloads.size) return res.status(429).json({error: 'Another export or ZIP download is running. Please wait until it finishes.'});
-  let playlist, format;
+  let playlist, songs, format;
   try {
-    playlist = playlistUrl(req.body?.playlist);
+    const mode = req.body?.mode || 'playlist';
+    if (!['playlist', 'songs'].includes(mode)) throw Error('Choose Playlist or Songs mode.');
+    if (mode === 'songs') songs = songUrls(req.body?.urls);
+    else playlist = playlistUrl(req.body?.playlist);
     format = req.body?.format;
     if (!['mp3', 'wav', 'original'].includes(format)) throw Error('Choose MP3, WAV, or Original.');
   } catch (error) { return res.status(400).json({error: error.message}); }
@@ -56,7 +60,7 @@ app.post('/api/jobs', async (req, res) => {
   (async () => {
     try {
       await mkdir(job.folder, {recursive: true, mode: 0o700});
-      const result = await exportPlaylist({playlist, format, lyrics: req.body.lyrics === true,
+      const result = await (songs ? exportSongs : exportPlaylist)({playlist, songs, format, lyrics: req.body.lyrics === true,
         folder: job.folder, signal: job.controller.signal, update: state => Object.assign(job, state)});
       Object.assign(job, result, {status: 'ready', stage: 'ready', percent: 100, message: 'Your ZIP is ready'});
     } catch (error) {

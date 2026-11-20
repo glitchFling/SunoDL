@@ -50,9 +50,17 @@
     <div class="studio-heading"><div><span class="section-index">01 /</span><h2>Build your offline collection</h2></div><span class="studio-tag">THE EXPORT STUDIO</span></div>
     <div class="workspace">
       <form id="form" class="export-form">
+        <fieldset class="download-modes"><legend>Download mode</legend><label><input type="radio" name="mode" value="playlist" checked> Suno playlist</label><label><input type="radio" name="mode" value="songs"> Songs</label></fieldset>
+        <div id="playlist-field">
         <div class="field-heading"><label for="playlist">Playlist link</label><span>PUBLIC PLAYLISTS</span></div>
         <div class="url-field"><svg class="icon"><use href="#link"/></svg><input id="playlist" type="url" placeholder="https://suno.com/playlist/…" required autocomplete="url" spellcheck="false" aria-describedby="url-help"><span class="input-arrow">↗</span></div>
         <p class="field-help" id="url-help">Copy the link from your public playlist on Suno.</p>
+        </div>
+        <div id="songs-field" hidden>
+          <div class="field-heading"><label for="song-urls">Song links</label><span>ONE PER LINE</span></div>
+          <textarea id="song-urls" rows="6" spellcheck="false" aria-describedby="songs-help" placeholder="https://suno.com/song/…&#10;https://music.apple.com/us/song/…/123456789"></textarea>
+          <p class="field-help" id="songs-help">Allowed URLs — Suno /song/ links and Apple Music /song/ links or /album/ links with ?i= for a single song. Apple Music uses AAPLmusicDownloader. ZIP order follows your links.</p>
+        </div>
         <section id="playlist-preview" hidden aria-label="Playlist artwork"><div class="preview-heading"><img id="playlist-cover" referrerpolicy="no-referrer" alt=""><div><b id="playlist-title"></b><p id="playlist-summary"></p></div></div><div id="track-artwork" aria-label="Track covers"></div></section>
         <fieldset class="formats"><legend>Make it your format</legend><div class="format-grid">
           <label class="format-card"><input type="radio" name="format" value="mp3" checked><span class="format-top"><b>MP3</b><span class="radio-dot"></span></span><span class="format-description">The everyday favorite</span><span class="format-note">SMALLER FILES</span></label>

@@ -3,6 +3,18 @@ const form = $('#form'), go = $('#go'), status = $('#status'), loading = $('#loa
 const progress = $('#progress'), label = $('#progress-label'), value = $('#progress-value');
 const cancel = $('#cancel'), saveAgain = $('#save-again');
 const stages = ['loading', 'preparing', 'cleaning', 'downloading'];
+const downloadMode = () => $('input[name=mode]:checked').value;
+function syncMode() {
+  const songs = downloadMode() === 'songs';
+  $('#playlist-field').hidden = songs;
+  $('#songs-field').hidden = !songs;
+  $('#playlist').required = !songs;
+  $('#song-urls').required = songs;
+  $('.lyrics-option').hidden = songs;
+  go.querySelector('span').textContent = songs ? 'Download songs' : 'Export playlist';
+}
+document.querySelectorAll('input[name=mode]').forEach(input => input.addEventListener('change', syncMode));
+syncMode();
 let jobId = null, busy = false, cancelled = false;
 const remember = id => { try { id ? sessionStorage.setItem('sunodl-job', id) : sessionStorage.removeItem('sunodl-job'); } catch {} };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -12,7 +24,8 @@ function setBusy(enabled) {
   busy = enabled;
   go.disabled = enabled;
   form.setAttribute('aria-busy', String(enabled));
-  go.querySelector('span').textContent = enabled ? 'Export in progress' : 'Export playlist';
+  go.querySelector('span').textContent = enabled ? 'Export in progress' : downloadMode() === 'songs' ? 'Download songs' : 'Export playlist';
+  document.querySelectorAll('input[name=mode]').forEach(input => { input.disabled = enabled; });
   cancel.hidden = !enabled;
 }
 function stage(name, message, percent, detail = '') {
@@ -46,7 +59,7 @@ function saveZip(id, filename) {
 
 let previewKey = '';
 function showArtwork(job) {
-  if (!job.title || !job.previewTracks) return;
+  if (!job.title || !job.previewTracks?.length) return;
   const key = job.id + job.cover;
   if (key === previewKey) return;
   previewKey = key;
@@ -109,12 +122,17 @@ async function run(existingId) {
   setBusy(true); cancelled = false; state('running'); saveAgain.hidden = true;
   $('#session-badge').textContent = 'LIVE EXPORT';
   $('#session-heading').textContent = 'Finding your next replay.';
-  status.textContent = 'Opening your playlist. We’ll take it from here.';
-  stage('loading', 'Opening your playlist', null);
+  status.textContent = downloadMode() === 'songs' ? 'Preparing your song links.' : 'Opening your playlist. We’ll take it from here.';
+  stage('loading', downloadMode() === 'songs' ? 'Opening your songs' : 'Opening your playlist', null);
   try {
     if (!existingId) {
+      previewKey = '';
+      $('#playlist-preview').hidden = true;
+      $('#hero-cover').hidden = true;
+      $('.record-scene').classList.remove('has-artwork');
       const job = await jsonRequest('/api/jobs', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
-        playlist: $('#playlist').value, format: $('input[name=format]:checked').value, lyrics: $('#lyrics').checked
+        mode: downloadMode(), urls: $('#song-urls').value,
+        playlist: $('#playlist').value, format: $('input[name=format]:checked').value, lyrics: downloadMode() === 'playlist' && $('#lyrics').checked
       })}, 60000);
       jobId = job.id;
     } else jobId = existingId;
